@@ -1,0 +1,14 @@
+# -*- Mode: shell-script -*-
+# 	$Id: installkernel.sysconfig 30419 2004-06-29 04:50:42Z prigaux $	
+# Configuration option when installing a kernel and initrscript.
+
+# Set this to yes if you never want link from /boot/vmlinuz to the
+# kernel.
+NOLINK=""
+
+# Set this to yes if you don't want to add entry to your bootloader
+NOENTRY=""
+
+# If you want to pass options to the "make-initrd" helper script you
+# can do it here.
+INITRDOPTS=""

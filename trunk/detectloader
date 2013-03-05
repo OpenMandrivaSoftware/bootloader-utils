@@ -1,0 +1,8 @@
+#!/bin/sh
+# -*- Mode: cperl -*-
+# Copyright (C) 2000-2004 Mandriva, Pixel <pixel@mandriva.com>
+# and others Mandriva folks.
+# Redistribution of this file is permitted under the terms of the GNU
+# Public License (GPL)
+
+bootloader-config --action detectloader

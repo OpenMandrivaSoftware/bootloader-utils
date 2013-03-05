@@ -1,0 +1,125 @@
+#!/bin/sh
+#--------------------------------------------------------------------
+# Copyright (C) 2000, 2002 by Mandriva,
+# Chmouel Boudjnah <chmouel@mandriva.com>, 
+# Redistribution of this file is permitted under the terms of the GNU 
+# Public License (GPL)
+#--------------------------------------------------------------------
+# $Id: installkernel 31366 2006-05-11 12:45:38Z tvignaud $
+#--------------------------------------------------------------------
+## description: 
+#	      Install a kernel to /boot and add an entry for grub,
+#             lilo, or yaboot
+
+# /etc/sysconfig/installkernel variables
+NOLINK=""
+NOENTRY=""
+INITRDOPTS=""
+
+# deprecated /etc/sysconfig/installkernel variables
+NOLAUNCH=""
+
+# local variables
+action="add-kernel"
+no_initrd=
+
+if [ -f /etc/sysconfig/installkernel ];then
+    source /etc/sysconfig/installkernel
+fi
+
+export PATH=$PATH:/sbin:/usr/sbin
+
+function do_load_loop_module () {
+    modprobe loop 2> /dev/null > /dev/null
+}
+
+function usage () {
+cat << EOF >&2
+Usage: ${0##*/} -[NRLh] KERNEL_VERSION [BOOTIMAGE MAPFILE [BOOTDIR]]
+
+  -N:  Don't add entry to bootloader
+
+  -R:  Remove bootloader entry and prepare to remove kernel
+  -L:  Don't do link to default /boot/vmlinuz and /boot/System.map
+
+  -C: use cramfs for initrd.
+  
+  -h:  This help.
+    
+EOF
+exit 2
+}
+
+while getopts algyNdnRsSCiLch opt
+  do
+  case "$opt" in
+      a) ;; # was autodetect
+      s) ;; # was CREATE_LINK_SOURCE
+      S) ;; # was REMOVE_LINK_SOURCE
+
+      N) NOENTRY="yes";;
+      n) NOLAUNCH="yes";;
+
+      R) action="remove-kernel";;
+
+      i) no_initrd="yes";;
+      L) NOLINK="yes";;
+      c) ;; # was NOCOPY
+
+      C) INITRDOPTS=$INITRDOPTS" --initrdfs=cramfs";;
+      h) usage;;
+      *) usage;;
+  esac
+done
+shift $((OPTIND - 1))
+
+version=$1
+
+if [ $# = 3 -o $# = 4 ]; then
+    vmlinuz=$2
+    map_file=$3
+    [ -n "$4" ] && boot=$4 || boot=/boot
+
+    NOLINK="yes"
+    cp -f $vmlinuz $boot/vmlinuz-$version
+    cp -f $map_file $boot/System.map-$version
+    rm -f $boot/initrd-$version.img #- force rebuilding the initrd
+
+    config=.config
+    [ -f $config ] || config=../../../.config
+    [ -f $config ] && cp -f $config $boot/config-$version
+
+    if [ ! -d /lib/modules/$version ]; then
+	echo "no modules installed, so not building initrd (maybe you should run \"make modules_install\" first)"
+	exit 0
+    fi
+
+elif [ $# != 1 ]; then
+    usage
+fi
+
+
+# this is for backward compatibility
+# don't use AUTOREMOVE anymore
+[ "$AUTOREMOVE" = "no" ] && NOENTRY="yes"
+
+if [[ $version == *BOOT ]] && [ "$action" == "add-kernel" ];then
+    cat <<EOF 1>&2
+*********     WARNING	  **********
+You installed a BOOT kernel, and this is not intended for use on a normal system.
+EOF
+fi
+
+[ -z "$DURING_INSTALL" ] || exit 0
+
+[ "$action" = "remove-kernel" ] && do_load_loop_module
+
+options="--action $action"
+[ -z "$NOLINK" ] || options="--no-short-name $options"
+[ -z "$NOENTRY" ] || options="--no-entry $options"
+[ -z "$NOLAUNCH" ] || options="--no-launch $options"
+[ -z "$NOINITRD" ] || options="--no-initrd $options"
+
+if [ -x /usr/sbin/bootloader-config ]; then  
+    bootloader-config --kernel-version $version --initrd-options "$INITRDOPTS" $options
+fi

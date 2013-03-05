@@ -1,0 +1,42 @@
+.TH rebootin 8 "03 Mar 2001" "Mandriva" "Mandriva Linux"
+.IX rebootin
+.SH NAME
+rebootin \- Reboots the machine using a particular Boot Loader entry
+.SH SYNOPSIS
+.B rebootin [\fIOPTIONS\fR] <\fIlabel\fP>
+.SH DESCRIPTION
+\fBrebootin\fP reboots the machine it is launched on. While with a
+simple \fBreboot\fP you need to manually select the boot entry to use
+at startup, \fBrebootin\fP allows to specify the boot entry on the
+command line.
+.PP
+<\fIlabel\fP> is the name of the entry as named in the boot loader
+configuration file.
+.PP
+\fBrebootin\fP currently works with \fBLILO\fP and \fBGrub\fP.
+.PP
+Running \fBrebootin\fP without any argument displays the list of
+available boot entries as supported by the current boot loader.
+.SH OPTIONS
+.TP
+.I -f
+Create a /fastboot file to reboot in fastboot mode (eg: no \fBfsck(8)\fP).
+.TP
+.I -n
+Don't reboot immediately just set the flags for next reboot.
+.SH FILES
+/etc/lilo.conf
+/boot/grub/menu.lst
+.br
+The \fBrebootin\fP executable (perl script)
+.PP
+.SH "SEE ALSO"
+grub(8),
+lilo(8),
+fsck(8)
+.SH AUTHORS
+Pascal Rigaux, Mandriva
+.br
+pixel@mandriva.com
+.PP
+Chmouel Boudjnah, Mandriva
