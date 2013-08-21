@@ -1,0 +1,157 @@
+#!/usr/bin/perl
+#--------------------------------------------------------------------
+# Copyright (C) 2000-2010 by Mandriva,
+# Pixel <pixel@mandriva.com>,
+# Chmouel Boudjnah <chmouel@mandriva.com>,
+# Redistribution of this file is permitted under the terms of the GNU
+# Public License (GPL)
+#--------------------------------------------------------------------
+# $Id: rebootin 109033 2007-01-15 09:40:20Z pixel $
+#--------------------------------------------------------------------
+## description:
+#		Reboot once on a specified image for grub or lilo
+
+use strict;
+use MDK::Common;
+
+my $lilo_conf = "/etc/lilo.conf";
+
+my $grub_menu = "/boot/grub/menu.lst";
+my $grub2_menu = "/boot/grub2/grub.cfg";
+my $grub2_cfg = "/etc/default/grub";
+my ($fastboot, $noreboot, $list, $menu);
+
+while ($ARGV[0] =~ /^-/) {
+    local $_ = shift;
+    if (/^-f/) {
+	$fastboot++;
+    } elsif (/^-l/) {
+	$list++;
+    } elsif (/^-n/) {
+	$noreboot++;
+    } elsif (/^-m/) {
+	$menu++;
+    } else {
+	die "Unknown switch $_\n";
+    }
+}
+
+$menu || $list || @ARGV == 1 && $ARGV[0] or usage();
+!$menu || @ARGV == 0 or usage();
+
+my ($wanted_entry) = @ARGV;
+
+my $bootloader  = `/usr/sbin/detectloader -q` or die "Can't detect your bootloader\n";chomp $bootloader;
+
+my @entries;
+if ($bootloader =~ /GRUB2/) {
+    grub2_conf();
+} elsif ($bootloader =~ /GRUB/) {
+    grub_conf();
+} elsif ($bootloader =~ /LILO/) {
+    lilo_conf();
+} elsif ($bootloader =~ /YABOOT/) {
+    die "Sorry, can't do this with yaboot...\n";
+} else {
+    die "Can't detect your bootloader\n";
+}
+exec "reboot" unless $noreboot;
+
+
+sub list_entries() { print "$_\n" foreach @entries; exit(0) }
+sub select_entry() {
+    my $i = 1;
+    print $i++ . ") $_\n" foreach @entries;
+    print "0) exit\n";
+    my $userinput;
+    do {
+	print "> ";
+        $userinput = <STDIN>;
+	chomp $userinput;
+    } while ($userinput > $i);
+    exit(1) unless $userinput;
+    $entries[$userinput-1];
+}
+
+sub lilo_conf() {
+    open(my $F, $lilo_conf) or die "lilo is not installed ($lilo_conf is missing)\n";
+    @entries = map { /="?([^"\n]+)/ } grep { /\s*label=\S*/ } <$F>;
+    list_entries() if $list;
+    $wanted_entry = select_entry() if $menu;
+    @entries > 0 or die "Bad lilo.conf (no entry found)\n";
+    grep { $_ eq $wanted_entry } @entries or usage();
+    write_fast_boot() if $fastboot;
+    system("lilo -R $wanted_entry"); die "error while wanting to reboot on $wanted_entry\n" if $?;
+}
+
+sub grub2_conf() {
+    open(my $F, $grub2_menu) or die "grub2 is not installed ($grub2_menu is missing)\n";
+
+    # Update menu if needed:
+    if (cat_($grub2_cfg) !~ /^GRUB_DEFAULT="saved"/sm) {
+	append_to_file($grub2_cfg, qq(GRUB_DEFAULT="saved"\n));
+	system('updates-grub2');
+    }
+
+    foreach (<$F>) {
+	if (/^[^#]*menuentry\s+'([^']*)/) {
+	    push @entries, $1;
+	}
+    }
+    list_entries() if $list;
+    $wanted_entry = select_entry() if $menu;
+    @entries > 0 or die "bad menu.lst (no entry found)\n";
+
+    if (member($wanted_entry, @entries)) {
+	system('grub2-reboot', $wanted_entry);
+	write_fast_boot() if $fastboot;
+	return;
+    }
+
+    print STDERR "$wanted_entry not found\n";
+    usage(); # not found
+}
+
+sub grub_conf() {
+    open(my $F, $grub_menu) or die "grub is not installed ($grub_menu is missing)\n";
+    my @short_entries;
+    foreach (<$F>) {
+	if (/^title\s+(.*)/) {
+	    push @entries, $1;
+	} elsif (/BOOT_IMAGE=(\S+)/) {
+	    $short_entries[$#entries] = $1;
+	}
+    }
+    list_entries() if $list;
+    $wanted_entry = select_entry() if $menu;
+    @entries > 0 or die "bad menu.lst (no entry found)\n";
+
+    for (my $i = 0; $i < @entries; $i++) {
+	if ($wanted_entry eq $entries[$i] || $wanted_entry eq $short_entries[$i]) {
+	    set_grub($i);
+	    return;
+	}
+    }
+
+    print STDERR "$wanted_entry not found\n";
+    usage(); # not found
+}
+
+sub set_grub {
+    open(my $F, "| grub --device-map=/boot/grub/device.map --batch");
+    print $F "savedefault --default=$_[0] --once\nquit\n";
+    write_fast_boot() if $fastboot;
+}
+
+sub usage() {
+    my $entries = @entries ? "  where <label> is one of " . join(", ", @entries) . "\n" : '';
+    die <<'EOF' . $entries;
+usage: rebootin -l 
+       rebootin [-n] [-f] -m
+       rebootin [-n] [-f] <label>
+EOF
+}
+
+sub write_fast_boot() {
+    open(my $_F, ">/fastboot");
+}
